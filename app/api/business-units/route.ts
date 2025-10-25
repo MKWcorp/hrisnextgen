@@ -7,14 +7,11 @@ export async function GET(request: NextRequest) {
       orderBy: {
         name: 'asc',
       },
-    });
-
-    return NextResponse.json(businessUnits);
+    });    return NextResponse.json(businessUnits);
   } catch (error) {
     console.error('Error fetching business units:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch business units' },
-      { status: 500 }
-    );
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    // Return empty array instead of error object to prevent frontend crashes
+    return NextResponse.json([]);
   }
 }

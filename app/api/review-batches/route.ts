@@ -15,14 +15,11 @@ export async function GET() {
       orderBy: {
         created_at: 'desc',
       },
-    });
-
-    return NextResponse.json(batches);
+    });    return NextResponse.json(batches);
   } catch (error) {
     console.error('Error fetching review batches:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch review batches' },
-      { status: 500 }
-    );
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    // Return empty array instead of error object to prevent frontend crashes
+    return NextResponse.json([]);
   }
 }

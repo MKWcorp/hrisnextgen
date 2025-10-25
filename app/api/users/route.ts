@@ -16,14 +16,11 @@ export async function GET() {
       orderBy: {
         name: 'asc',
       },
-    });
-
-    return NextResponse.json(users);
+    });    return NextResponse.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch users' },
-      { status: 500 }
-    );
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    // Return empty array instead of error object to prevent frontend crashes
+    return NextResponse.json([]);
   }
 }

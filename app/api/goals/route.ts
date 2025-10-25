@@ -64,15 +64,12 @@ export async function GET(request: NextRequest) {
         ...kpi,
         target_bulanan: kpi.target_bulanan?.toString(),
       })),
-    }));
-
-    return NextResponse.json(serializedGoals);
+    }));    return NextResponse.json(serializedGoals);
   } catch (error) {
     console.error('Error fetching goals:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch goals' },
-      { status: 500 }
-    );
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    // Return empty array instead of error object to prevent frontend crashes
+    return NextResponse.json([]);
   }
 }
 
