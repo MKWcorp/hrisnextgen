@@ -23,11 +23,11 @@ Layer 3: Generate KPIs dari rekomendasi yang di-approve (Auto)
 **Webhook**: `/webhook/hrisnextgen-analyze`
 
 **Nodes**:
-1. Webhook - Terima data goals
+1. Webhook - Terima data goals dari Next.js
 2. AI Agent 1 - **Portfolio Health Check** (Simple & Fast)
-3. Code - Parse response
-4. HTTP Request - Save to database `analysis_results`
-5. Respond to Webhook - Return analysis_id
+3. Code - Parse response & format output
+4. HTTP Request - POST ke `http://localhost:3000/api/webhooks/analysis-result`
+5. Respond to Webhook - Return analysis_id ke Next.js
 
 **AI Prompt 1** (Short & Fast - DYNAMIC):
 ```

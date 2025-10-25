@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     const goals = await prisma.strategic_goals.findMany({
       include: {
         business_units: true,
-        created_by_user: {
+        users: {
           include: {
             roles: true,
           },
@@ -31,9 +31,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate batch_id for this analysis
+    const batchName = `Portfolio Analysis - ${new Date().toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+
+    // Get first goal's creator and business unit for batch record
+    const firstGoal = goals[0];
+    const createdByUserId = firstGoal.created_by_user_id;
+    const businessUnitId = firstGoal.business_unit_id;
+
+    // Create analysis_batch record
+    const analysisBatch = await prisma.analysis_batches.create({
+      data: {
+        batch_name: batchName,
+        created_by_user_id: createdByUserId,
+        business_unit_id: businessUnitId,
+        status: 'Analyzing',
+      },
+    });
+
+    const batchId = analysisBatch.batch_id;
+    console.log(`✅ Created analysis batch: ${batchId} (${batchName})`);
+
+    // Update all goals with this batch_id
+    const updateResult = await prisma.strategic_goals.updateMany({
+      where: {
+        goal_id: {
+          in: goals.map((g) => g.goal_id),
+        },
+      },
+      data: {
+        batch_id: batchId,
+      },
+    });
+
+    console.log(`✅ Updated ${updateResult.count} goals with batch_id: ${batchId}`);
+
     // Prepare analysis payload for n8n
     const analysisPayload = {
       analysis_type: 'portfolio_review',
+      batch_id: batchId,
       total_goals: goals.length,
       goals_summary: goals.map((goal) => {
         // Calculate duration in months
@@ -48,11 +90,10 @@ export async function POST(request: NextRequest) {
           goal_name: goal.goal_name,
           target_value: goal.target_value.toString(),
           target_unit: goal.target_unit,
-          status: goal.status,
           business_unit: goal.business_units?.name || 'Unknown',
           business_unit_description: goal.business_units?.description || '',
-          created_by: goal.created_by_user?.name || 'Unknown',
-          creator_role: goal.created_by_user?.roles?.role_name || 'Unknown',
+          created_by: goal.users?.name || 'Unknown',
+          creator_role: goal.users?.roles?.role_name || 'Unknown',
           start_date: goal.start_date.toISOString().split('T')[0], // Format: YYYY-MM-DD
           end_date: goal.end_date.toISOString().split('T')[0],
           duration_months: durationMonths,
@@ -81,6 +122,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: `Analysis prepared for ${goals.length} goals. [DEV MODE: n8n webhook not configured yet]`,
+        batch_id: batchId,
+        batch_name: batchName,
         goals_analyzed: goals.length,
         dev_mode: true,
         payload_preview: analysisPayload,
@@ -122,6 +165,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: `Analysis triggered for ${goals.length} strategic goals. AI akan memberikan rekomendasi dalam beberapa saat.`,
+        batch_id: batchId,
+        batch_name: batchName,
         goals_analyzed: goals.length,
       });
     } catch (fetchError) {

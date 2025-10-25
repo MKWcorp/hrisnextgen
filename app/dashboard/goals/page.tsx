@@ -38,10 +38,61 @@ export default function GoalsPage() {
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [analyzingGoals, setAnalyzingGoals] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  
+  // Polling states
+  const [pollingBatchId, setPollingBatchId] = useState<string | null>(null);
+  const [pollingActive, setPollingActive] = useState(false);
+  const [pollingAttempts, setPollingAttempts] = useState(0);
 
   useEffect(() => {
     fetchGoals();
   }, []);
+
+  // Polling effect - check status every 3 seconds
+  useEffect(() => {
+    if (!pollingActive || !pollingBatchId) return;
+
+    const MAX_ATTEMPTS = 60; // Stop after 3 minutes (60 attempts * 3 seconds)
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/check-status/${pollingBatchId}`);
+        const data = await response.json();
+
+        setPollingAttempts(prev => prev + 1);
+
+        if (data.status === 'Review_Pending' || data.status === 'Completed') {
+          // Analysis complete!
+          clearInterval(pollInterval);
+          setPollingActive(false);
+          setPollingBatchId(null);
+          setPollingAttempts(0);
+          setAnalyzingGoals(false);
+          setAnalysisResult('✅ Analisa selesai! Memuat ulang data...');
+          
+          // Refresh goals to show updated data
+          await fetchGoals();
+          router.refresh();
+          
+          // Clear success message after 3 seconds
+          setTimeout(() => setAnalysisResult(null), 3000);
+        } else if (pollingAttempts >= MAX_ATTEMPTS) {
+          // Timeout after max attempts
+          clearInterval(pollInterval);
+          setPollingActive(false);
+          setPollingBatchId(null);
+          setPollingAttempts(0);
+          setAnalyzingGoals(false);
+          setAnalysisResult('⚠️ Analisa memakan waktu lama. Silakan refresh halaman untuk cek status.');
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    // Cleanup on unmount
+    return () => clearInterval(pollInterval);
+  }, [pollingActive, pollingBatchId, pollingAttempts, router]);
 
   const fetchGoals = async () => {
     try {
@@ -94,6 +145,7 @@ export default function GoalsPage() {
 
     setAnalyzingGoals(true);
     setAnalysisResult(null);
+    setPollingAttempts(0);
 
     try {
       const response = await fetch('/api/goals/analyze', {
@@ -105,27 +157,26 @@ export default function GoalsPage() {
 
       if (response.ok) {
         if (data.dev_mode) {
-          setAnalysisResult(`✅ ${data.message}\n\n📊 Payload ready untuk ${data.goals_analyzed} goals. Setup n8n webhook untuk enable AI analysis.`);
+          // Development mode - no n8n webhook
+          const batchInfo = data.batch_id ? `\n📦 Batch ID: ${data.batch_id.substring(0, 8)}...` : '';
+          setAnalysisResult(`✅ ${data.message}\n\n📊 Payload ready untuk ${data.goals_analyzed} goals. Setup n8n webhook untuk enable AI analysis.${batchInfo}`);
+          setAnalyzingGoals(false);
         } else {
-          setAnalysisResult(`✅ ${data.message}`);
+          // Production mode - start polling
+          setPollingBatchId(data.batch_id);
+          setPollingActive(true);
+          // analyzingGoals stays true during polling
         }
-        
-        // Auto-hide success message after 8 seconds
-        setTimeout(() => {
-          setAnalysisResult(null);
-        }, 8000);
       } else {
         // Show detailed error with help
         const errorMsg = data.message || data.error || 'Failed to trigger analysis';
         const helpMsg = data.help ? `\n\n💡 ${data.help}` : '';
         setAnalysisResult(`❌ ${errorMsg}${helpMsg}`);
-        
-        // Don't auto-hide error messages
+        setAnalyzingGoals(false);
       }
     } catch (error) {
       console.error('Error analyzing goals:', error);
       setAnalysisResult('Error: Failed to connect to analysis service');
-    } finally {
       setAnalyzingGoals(false);
     }
   };
@@ -172,7 +223,7 @@ export default function GoalsPage() {
                   {analyzingGoals ? (
                     <>
                       <FontAwesomeIcon icon={faSpinner} className="w-4 h-4 animate-spin" />
-                      Menganalisa...
+                      {pollingActive ? `Polling... (${pollingAttempts})` : 'Menganalisa...'}
                     </>
                   ) : (
                     <>
@@ -219,6 +270,42 @@ export default function GoalsPage() {
                   Close
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Polling Loading Animation */}
+        {pollingActive && (
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-xl">
+                  🤖
+                </div>
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-purple-900 mb-1">
+                  AI sedang menganalisa goals Anda...
+                </h4>
+                <p className="text-sm text-purple-700 mb-2">
+                  Memeriksa status analisa: <span className="font-mono font-semibold">{pollingAttempts}</span> kali
+                </p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 bg-purple-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-purple-600 to-blue-600 rounded-full transition-all duration-300 animate-pulse"
+                      style={{ width: `${Math.min((pollingAttempts / 60) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-purple-600 font-mono">
+                    {Math.round((pollingAttempts / 60) * 100)}%
+                  </span>
+                </div>
+                <p className="text-xs text-purple-600 mt-2">
+                  💡 Jangan tutup halaman ini. Refresh otomatis akan dilakukan setelah analisa selesai.
+                </p>
+              </div>
             </div>
           </div>
         )}
