@@ -1,5 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { PrismaClient } from '@prisma/client';
+import type { DefaultArgs } from '@prisma/client/runtime/library';
+
+interface ProposedBreakdown {
+  breakdown_id: string;
+  batch_id: string;
+  name: string;
+  value: bigint;
+  unit?: string | null;
+  description?: string | null;
+  status?: string | null;
+  created_at: Date;
+}
+
+interface BatchManagedAsset {
+  asset_id: string;
+  batch_id: string;
+  asset_category: string;
+  asset_name: string;
+  asset_identifier?: string | null;
+  metric_name?: string | null;
+  metric_value?: bigint | null;
+  created_at: Date;
+}
+
+interface AIRecommendedRole {
+  role_recommendation_id: string;
+  batch_id: string;
+  role_name: string;
+  responsibilities: string;
+  created_at: Date;
+}
+
+interface AnalysisBatch {
+  batch_id: string;
+  batch_name: string;
+  status: string;
+  created_by_user_id: string;
+  business_unit_id: string;
+  created_at: Date;
+  ai_recommended_roles: AIRecommendedRole[];
+  proposed_breakdowns: ProposedBreakdown[];
+  batch_managed_assets: BatchManagedAsset[];
+}
 
 export async function GET(
   request: NextRequest,
@@ -7,9 +51,7 @@ export async function GET(
 ) {
   try {
     // Await params in Next.js 15+
-    const { batch_id } = await params;
-
-    // Fetch batch with all relations
+    const { batch_id } = await params;    // Fetch batch with all relations
     const batch = await prisma.analysis_batches.findUnique({
       where: {
         batch_id: batch_id,
@@ -27,16 +69,14 @@ export async function GET(
         { error: 'Batch not found', message: `Analysis batch with ID ${batch_id} does not exist` },
         { status: 404 }
       );
-    }
-
-    // Convert BigInt to string for JSON serialization
+    }    // Convert BigInt to string for JSON serialization
     const serializedBatch = {
       ...batch,
-      proposed_breakdowns: batch.proposed_breakdowns.map(breakdown => ({
+      proposed_breakdowns: batch.proposed_breakdowns.map((breakdown: typeof batch.proposed_breakdowns[0]) => ({
         ...breakdown,
         value: breakdown.value.toString(), // Convert BigInt to string
       })),
-      batch_managed_assets: batch.batch_managed_assets.map(asset => ({
+      batch_managed_assets: batch.batch_managed_assets.map((asset: typeof batch.batch_managed_assets[0]) => ({
         ...asset,
         metric_value: asset.metric_value ? asset.metric_value.toString() : null, // Convert BigInt to string
       })),
@@ -83,10 +123,8 @@ export async function POST(
         { error: 'Invalid data', message: 'Assets array is required' },
         { status: 400 }
       );
-    }
-
-    // Use transaction for safe operations
-    await prisma.$transaction(async (tx) => {
+    }    // Use transaction for safe operations
+    await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => {
       // Step 1: Delete all old team roles for this batch
       await tx.ai_recommended_roles.deleteMany({
         where: {

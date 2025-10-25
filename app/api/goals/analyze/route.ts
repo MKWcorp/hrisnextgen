@@ -1,8 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export async function POST(request: NextRequest) {
-  try {
+interface StrategicGoal {
+  goal_id: string;
+  goal_name: string;
+  target_value: bigint;
+  target_unit?: string | null;
+  start_date: Date;
+  end_date: Date;
+  batch_id?: string | null;
+  business_unit_id?: string | null;
+  created_by_user_id?: string | null;
+  created_at?: Date | null;
+  business_units?: {
+    name: string;
+    description?: string | null;
+  };
+  users?: {
+    name: string;
+    roles?: {
+      role_name: string;
+    } | null;
+  };
+  proposed_kpis?: Array<{
+    is_approved: boolean;
+  }>;
+}
+
+export async function POST(request: NextRequest) {  try {
     // Fetch all strategic goals with related data
     const goals = await prisma.strategic_goals.findMany({
       include: {
@@ -56,9 +81,7 @@ export async function POST(request: NextRequest) {
     });
 
     const batchId = analysisBatch.batch_id;
-    console.log(`✅ Created analysis batch: ${batchId} (${batchName})`);
-
-    // Update all goals with this batch_id
+    console.log(`✅ Created analysis batch: ${batchId} (${batchName})`);    // Update all goals with this batch_id
     const updateResult = await prisma.strategic_goals.updateMany({
       where: {
         goal_id: {
@@ -76,8 +99,7 @@ export async function POST(request: NextRequest) {
     const analysisPayload = {
       analysis_type: 'portfolio_review',
       batch_id: batchId,
-      total_goals: goals.length,
-      goals_summary: goals.map((goal) => {
+      total_goals: goals.length,      goals_summary: goals.map((goal: typeof goals[0]) => {
         // Calculate duration in months
         const startDate = new Date(goal.start_date);
         const endDate = new Date(goal.end_date);
@@ -93,12 +115,11 @@ export async function POST(request: NextRequest) {
           business_unit: goal.business_units?.name || 'Unknown',
           business_unit_description: goal.business_units?.description || '',
           created_by: goal.users?.name || 'Unknown',
-          creator_role: goal.users?.roles?.role_name || 'Unknown',
-          start_date: goal.start_date.toISOString().split('T')[0], // Format: YYYY-MM-DD
+          creator_role: goal.users?.roles?.role_name || 'Unknown',          start_date: goal.start_date.toISOString().split('T')[0], // Format: YYYY-MM-DD
           end_date: goal.end_date.toISOString().split('T')[0],
           duration_months: durationMonths,
-          kpi_count: goal.proposed_kpis.length,
-          kpi_approved: goal.proposed_kpis.filter((kpi) => kpi.is_approved).length,
+          kpi_count: goal.proposed_kpis?.length ?? 0,
+          kpi_approved: goal.proposed_kpis?.filter((kpi: typeof goal.proposed_kpis[0]) => kpi.is_approved).length ?? 0,
         };
       }),
       analysis_request: {

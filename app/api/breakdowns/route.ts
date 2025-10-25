@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Define the type based on the schema
+interface ProposedBreakdown {
+  breakdown_id: string;
+  batch_id: string;
+  name: string;
+  value: bigint;
+  unit?: string | null;
+  description?: string | null;
+  status?: string | null;
+  created_at: Date;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -15,9 +27,7 @@ export async function GET(request: NextRequest) {
       orderBy: {
         created_at: 'desc',
       },
-    });
-
-    // Convert BigInt to string for JSON serialization
+    });    // Convert BigInt to string for JSON serialization
     const serializedBreakdowns = breakdowns.map((breakdown) => ({
       ...breakdown,
       value: breakdown.value.toString(),

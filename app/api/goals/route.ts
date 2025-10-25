@@ -1,12 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+interface KPI {
+  kpi_id: string;
+  target_bulanan?: bigint | null;
+  is_approved: boolean;
+  users?: {
+    user_id: string;
+    name: string;
+  } | null;
+  roles?: {
+    role_id: number;
+    role_name: string;
+  } | null;
+  [key: string]: any; // Allow other fields
+}
+
+interface Goal {
+  goal_id: string;
+  goal_name: string;
+  target_value: bigint;
+  target_unit?: string | null;
+  start_date: Date;
+  end_date: Date;
+  batch_id?: string | null;
+  business_unit_id?: string | null;
+  created_by_user_id?: string | null;
+  created_at?: Date | null;
+  business_units?: {
+    bu_id: string;
+    name: string;
+    description?: string | null;
+  } | null;
+  proposed_kpis: KPI[];
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const batchId = searchParams.get('batch_id');
 
-    const goals = await prisma.strategic_goals.findMany({
+    const goals: Goal[] = await prisma.strategic_goals.findMany({
       where: batchId ? { batch_id: batchId } : undefined,
       include: {
         business_units: true,
@@ -23,10 +57,10 @@ export async function GET(request: NextRequest) {
     });
 
     // Serialize BigInt fields
-    const serializedGoals = goals.map((goal) => ({
+    const serializedGoals = goals.map((goal: Goal) => ({
       ...goal,
       target_value: goal.target_value.toString(),
-      proposed_kpis: goal.proposed_kpis.map((kpi) => ({
+      proposed_kpis: goal.proposed_kpis.map((kpi: KPI) => ({
         ...kpi,
         target_bulanan: kpi.target_bulanan?.toString(),
       })),

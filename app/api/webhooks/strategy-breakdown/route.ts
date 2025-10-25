@@ -13,6 +13,18 @@ interface StrategyBreakdownPayload {
   breakdowns: BreakdownItem[];
 }
 
+interface CreatedBreakdown {
+  breakdown_id: string;
+  batch_id: string | null;
+  name: string;
+  value: bigint;
+  unit?: string | null;
+  description?: string | null;
+  status?: string | null;
+  created_at: Date;
+  [key: string]: any;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: StrategyBreakdownPayload = await request.json();
@@ -51,13 +63,11 @@ export async function POST(request: NextRequest) {
           },
         })
       )
-    );
-
-    return NextResponse.json(
+    );    return NextResponse.json(
       {
         message: 'Strategy breakdowns created successfully',
         count: createdBreakdowns.length,
-        breakdowns: createdBreakdowns.map((b) => ({
+        breakdowns: createdBreakdowns.map((b: typeof createdBreakdowns[0]) => ({
           ...b,
           value: b.value.toString(),
         })),

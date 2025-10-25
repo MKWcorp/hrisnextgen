@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+interface Role {
+  role_id: number;
+  role_name: string;
+  description?: string | null;
+}
+
+interface BusinessUnit {
+  bu_id: string;
+  name: string;
+  description?: string | null;
+}
+
 export async function POST() {
   try {
     console.log('🌱 Starting database seeding...');
@@ -49,20 +61,18 @@ export async function POST() {
     }
 
     // 3. Seed Users
-    console.log('👥 Seeding users...');
+    console.log('👥 Seeding users...');    // Get all roles
+    const roles: Role[] = await prisma.roles.findMany();
+    const managerRole = roles.find((r: Role) => r.role_name === 'Manager');
+    const contentCreatorRole = roles.find((r: Role) => r.role_name === 'Content Creator');
+    const socialMediaRole = roles.find((r: Role) => r.role_name === 'Social Media Manager');
+    const designerRole = roles.find((r: Role) => r.role_name === 'Graphic Designer');
+    const videoEditorRole = roles.find((r: Role) => r.role_name === 'Video Editor');
+    const copywriterRole = roles.find((r: Role) => r.role_name === 'Copywriter');
 
-    // Get all roles
-    const roles = await prisma.roles.findMany();
-    const managerRole = roles.find((r) => r.role_name === 'Manager');
-    const contentCreatorRole = roles.find((r) => r.role_name === 'Content Creator');
-    const socialMediaRole = roles.find((r) => r.role_name === 'Social Media Manager');
-    const designerRole = roles.find((r) => r.role_name === 'Graphic Designer');
-    const videoEditorRole = roles.find((r) => r.role_name === 'Video Editor');
-    const copywriterRole = roles.find((r) => r.role_name === 'Copywriter');
-
-    const drwEstetika = businessUnits.find((bu) => bu.name === 'DRW Estetika');
-    const drwClinic = businessUnits.find((bu) => bu.name === 'DRW Clinic');
-    const marketing = businessUnits.find((bu) => bu.name === 'Marketing');
+    const drwEstetika = businessUnits.find((bu: BusinessUnit) => bu.name === 'DRW Estetika');
+    const drwClinic = businessUnits.find((bu: BusinessUnit) => bu.name === 'DRW Clinic');
+    const marketing = businessUnits.find((bu: BusinessUnit) => bu.name === 'Marketing');
 
     const usersData = [
       // Managers
