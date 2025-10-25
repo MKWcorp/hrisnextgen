@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const navItems = [
   {
@@ -20,6 +21,12 @@ const navItems = [
     icon: '📋',
   },
   {
+    name: 'Review AI Strategy',
+    href: '/dashboard/review',
+    icon: '🤖',
+    badge: true, // Will show notification badge
+  },
+  {
     name: 'KPI Approval',
     href: '/dashboard/kpis',
     icon: '✅',
@@ -33,6 +40,27 @@ const navItems = [
 
 export default function Navigation() {
   const pathname = usePathname();
+  const [pendingReviews, setPendingReviews] = useState(0);
+
+  // Fetch pending reviews count
+  useEffect(() => {
+    const fetchPendingReviews = async () => {
+      try {
+        const response = await fetch('/api/analysis/pending-count');
+        if (response.ok) {
+          const data = await response.json();
+          setPendingReviews(data.count || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching pending reviews:', error);
+      }
+    };
+
+    fetchPendingReviews();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchPendingReviews, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200">
@@ -54,13 +82,14 @@ export default function Navigation() {
           <div className="flex items-center space-x-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
+              const showBadge = item.badge && pendingReviews > 0;
               
               return (
                 <Link
                   key={item.name}
                   href={item.href}
                   className={`
-                    flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                    relative flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
                     ${isActive 
                       ? 'bg-blue-50 text-blue-700 shadow-sm' 
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -69,6 +98,11 @@ export default function Navigation() {
                 >
                   <span className="text-lg">{item.icon}</span>
                   <span>{item.name}</span>
+                  {showBadge && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white animate-pulse">
+                      {pendingReviews}
+                    </span>
+                  )}
                 </Link>
               );
             })}

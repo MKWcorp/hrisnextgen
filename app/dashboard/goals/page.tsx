@@ -61,7 +61,7 @@ export default function GoalsPage() {
 
         setPollingAttempts(prev => prev + 1);
 
-        if (data.status === 'Review_Pending' || data.status === 'Completed') {
+        if (data.status === 'review_pending' || data.status === 'completed') {
           // Analysis complete!
           clearInterval(pollInterval);
           setPollingActive(false);

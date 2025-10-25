@@ -100,22 +100,36 @@ model proposed_breakdowns {
   status           String            @default("pending_approval") @db.VarChar(50)
   created_at       DateTime?         @default(now()) @db.Timestamptz(6)
   batch_id         String?           @db.Uuid
+  unit             String?
+  description      String
   analysis_batches analysis_batches? @relation(fields: [batch_id], references: [batch_id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model analysis_batches {
-  batch_id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  batch_name             String                @db.VarChar(255)
-  created_by_user_id     String?               @db.Uuid
-  business_unit_id       String?               @db.Uuid
-  status                 String                @default("Draft") @db.VarChar(50)
-  ai_team_recommendation Json?
-  created_at             DateTime?             @default(now()) @db.Timestamptz(6)
-  business_units         business_units?       @relation(fields: [business_unit_id], references: [bu_id], onDelete: NoAction, onUpdate: NoAction)
-  users                  users?                @relation(fields: [created_by_user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
-  proposed_breakdowns    proposed_breakdowns[]
-  strategic_goals        strategic_goals[]
+  batch_id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_name           String                 @db.VarChar(255)
+  created_by_user_id   String?                @db.Uuid
+  business_unit_id     String?                @db.Uuid
+  status               String                 @default("Draft") @db.VarChar(50)
+  created_at           DateTime?              @default(now()) @db.Timestamptz(6)
+  summary              String?
+  ai_recommended_roles ai_recommended_roles[]
+  business_units       business_units?        @relation(fields: [business_unit_id], references: [bu_id], onDelete: NoAction, onUpdate: NoAction)
+  users                users?                 @relation(fields: [created_by_user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+  batch_managed_assets batch_managed_assets[]
+  proposed_breakdowns  proposed_breakdowns[]
+  strategic_goals      strategic_goals[]
+}
+
+/// AI-generated role recommendations for analysis batches
+model ai_recommended_roles {
+  role_recommendation_id String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_id               String           @db.Uuid
+  role_name              String           @db.VarChar(255)
+  responsibilities       String
+  created_at             DateTime?        @default(now()) @db.Timestamptz(6)
+  analysis_batches       analysis_batches @relation(fields: [batch_id], references: [batch_id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model analysis_results {
@@ -129,4 +143,17 @@ model analysis_results {
   approved_recommendations String?
   status_workflow          String?   @default("quick_done") @db.VarChar(50)
   created_at               DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model batch_managed_assets {
+  asset_id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_id         String           @db.Uuid
+  asset_category   String           @db.VarChar(100)
+  asset_name       String           @db.VarChar(255)
+  asset_identifier String?
+  created_at       DateTime?        @default(now()) @db.Timestamptz(6)
+  metric_name      String?          @db.VarChar(100)
+  metric_value     BigInt?
+  analysis_batches analysis_batches @relation(fields: [batch_id], references: [batch_id], onDelete: Cascade, onUpdate: NoAction)
 }
