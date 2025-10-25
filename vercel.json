@@ -1,12 +1,4 @@
 {
-  "buildCommand": "prisma generate && next build",
-  "installCommand": "npm install",
-  "build": {
-    "env": {
-      "PRISMA_GENERATE_SKIP_POSTINSTALL": "false",
-      "PRISMA_GENERATE_DATAPROXY": "false"
-    }
-  },
   "functions": {
     "app/api/**/*.ts": {
       "maxDuration": 30,
