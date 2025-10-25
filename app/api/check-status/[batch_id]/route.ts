@@ -3,10 +3,11 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { batch_id: string } }
+  { params }: { params: Promise<{ batch_id: string }> }
 ) {
   try {
-    const { batch_id } = params;
+    // Await params in Next.js 15+
+    const { batch_id } = await params;
 
     // Get analysis batch status
     const batch = await prisma.analysis_batches.findUnique({
@@ -18,7 +19,7 @@ export async function GET(
         batch_name: true,
         status: true,
         created_at: true,
-        ai_team_recommendation: true,
+        summary: true,
       },
     });
 
@@ -34,7 +35,7 @@ export async function GET(
       batch_name: batch.batch_name,
       status: batch.status,
       created_at: batch.created_at,
-      has_recommendation: batch.ai_team_recommendation !== null,
+      has_summary: batch.summary !== null,
     });
   } catch (error) {
     console.error('Error checking batch status:', error);

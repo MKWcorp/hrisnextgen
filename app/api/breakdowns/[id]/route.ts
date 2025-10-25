@@ -25,9 +25,6 @@ export async function PATCH(
         ...(body.value !== undefined && { value: BigInt(body.value) }),
         ...(body.status && { status: body.status }),
       },
-      include: {
-        strategic_goals: true,
-      },
     });
 
     return NextResponse.json({

@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 interface BreakdownItem {
   name: string;
   value: number;
+  unit?: string;
+  description?: string;
 }
 
 interface StrategyBreakdownPayload {
@@ -40,20 +42,16 @@ export async function POST(request: NextRequest) {
       body.breakdowns.map((breakdown) =>
         prisma.proposed_breakdowns.create({
           data: {
-            goal_id: body.goal_id,
+            batch_id: goal.batch_id,
             name: breakdown.name,
             value: BigInt(breakdown.value),
+            unit: breakdown.unit || '',
+            description: breakdown.description || '',
             status: 'pending_approval',
           },
         })
       )
     );
-
-    // Update goal status
-    await prisma.strategic_goals.update({
-      where: { goal_id: body.goal_id },
-      data: { status: 'Awaiting Breakdown Approval' },
-    });
 
     return NextResponse.json(
       {

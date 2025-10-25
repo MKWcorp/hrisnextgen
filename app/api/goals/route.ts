@@ -4,10 +4,10 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status');
+    const batchId = searchParams.get('batch_id');
 
     const goals = await prisma.strategic_goals.findMany({
-      where: status ? { status } : undefined,
+      where: batchId ? { batch_id: batchId } : undefined,
       include: {
         business_units: true,
         proposed_kpis: {
@@ -148,7 +148,6 @@ export async function POST(request: NextRequest) {
             target_unit: goalData.target_unit || 'units',
             start_date: new Date(goalsRequest.dateRange.start_date),
             end_date: new Date(goalsRequest.dateRange.end_date),
-            status: 'Pending',
             business_unit_id: goalsRequest.businessUnitId,
             created_by_user_id: selectedUser.user_id,
           },
@@ -211,7 +210,6 @@ export async function POST(request: NextRequest) {
         target_unit: singleGoalRequest.target_unit,
         start_date: new Date(singleGoalRequest.start_date),
         end_date: new Date(singleGoalRequest.end_date),
-        status: 'Pending',
         business_unit_id: singleGoalRequest.business_unit_id,
         created_by_user_id: userWithRole.user_id,
       },

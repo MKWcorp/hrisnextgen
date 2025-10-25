@@ -3,15 +3,18 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Await params in Next.js 15+
+    const { id } = await params;
+    
     const searchParams = request.nextUrl.searchParams;
     const creatorId = searchParams.get('creator_id');
 
     // Fetch business unit details
     const businessUnit = await prisma.business_units.findUnique({
-      where: { bu_id: params.id },
+      where: { bu_id: id },
     });
 
     if (!businessUnit) {

@@ -3,17 +3,19 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const goalId = params.id;
+    // Await params in Next.js 15+
+    const { id } = await params;
+    const goalId = id;
 
     // Fetch goal with related data
     const goal = await prisma.strategic_goals.findUnique({
       where: { goal_id: goalId },
       include: {
         business_units: true,
-        created_by_user: true,
+        users: true,
       },
     });
 

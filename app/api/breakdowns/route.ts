@@ -4,16 +4,13 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const goalId = searchParams.get('goal_id');
+    const batchId = searchParams.get('batch_id');
     const status = searchParams.get('status');
 
     const breakdowns = await prisma.proposed_breakdowns.findMany({
       where: {
-        ...(goalId && { goal_id: goalId }),
+        ...(batchId && { batch_id: batchId }),
         ...(status && { status }),
-      },
-      include: {
-        strategic_goals: true,
       },
       orderBy: {
         created_at: 'desc',
@@ -40,18 +37,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    if (!body.goal_id || !body.name || body.value === undefined) {
+    if (!body.batch_id || !body.name || body.value === undefined) {
       return NextResponse.json(
-        { error: 'Missing required fields: goal_id, name, value' },
+        { error: 'Missing required fields: batch_id, name, value' },
         { status: 400 }
       );
     }
 
     const breakdown = await prisma.proposed_breakdowns.create({
       data: {
-        goal_id: body.goal_id,
+        batch_id: body.batch_id,
         name: body.name,
         value: BigInt(body.value),
+        unit: body.unit || null,
+        description: body.description || '',
         status: body.status || 'pending_approval',
       },
     });

@@ -55,12 +55,6 @@ export async function POST(request: NextRequest) {
       )
     );
 
-    // Update goal status
-    await prisma.strategic_goals.update({
-      where: { goal_id: body.goal_id },
-      data: { status: 'Awaiting KPI Approval' },
-    });
-
     return NextResponse.json(
       {
         message: 'KPIs created successfully',

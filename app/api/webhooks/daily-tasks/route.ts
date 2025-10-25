@@ -71,14 +71,6 @@ export async function POST(request: NextRequest) {
       )
     );
 
-    // Update goal status to Active
-    if (kpi.strategic_goals) {
-      await prisma.strategic_goals.update({
-        where: { goal_id: kpi.goal_id },
-        data: { status: 'Active' },
-      });
-    }
-
     return NextResponse.json(
       {
         message: 'Daily tasks created successfully',
