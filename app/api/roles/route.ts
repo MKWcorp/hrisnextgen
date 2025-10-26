@@ -18,3 +18,32 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { role_name, description } = body;
+
+    if (!role_name) {
+      return NextResponse.json(
+        { error: 'Role name is required' },
+        { status: 400 }
+      );
+    }
+
+    const role = await prisma.roles.create({
+      data: {
+        role_name,
+        description: description || null,
+      },
+    });
+
+    return NextResponse.json(role);
+  } catch (error) {
+    console.error('Error creating role:', error);
+    return NextResponse.json(
+      { error: 'Failed to create role' },
+      { status: 500 }
+    );
+  }
+}

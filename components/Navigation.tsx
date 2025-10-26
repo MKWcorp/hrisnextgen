@@ -31,6 +31,11 @@ const navItems = [
     href: '/dashboard/analytics',
     icon: '📊',
   },
+  {
+    name: 'Settings',
+    href: '/dashboard/settings',
+    icon: '⚙️',
+  },
 ];
 
 export default function Navigation() {
