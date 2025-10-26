@@ -27,19 +27,12 @@ interface StrategicGoal {
   }>;
 }
 
-export async function POST(request: NextRequest) {  try {
-    // Fetch all strategic goals with related data
+export async function POST(request: NextRequest) {  try {    // Fetch all strategic goals with related data
     const goals = await prisma.strategic_goals.findMany({
       include: {
         business_units: true,
         users: {
           include: {
-            roles: true,
-          },
-        },
-        proposed_kpis: {
-          include: {
-            users: true,
             roles: true,
           },
         },
@@ -118,8 +111,6 @@ export async function POST(request: NextRequest) {  try {
           creator_role: goal.users?.roles?.role_name || 'Unknown',          start_date: goal.start_date.toISOString().split('T')[0], // Format: YYYY-MM-DD
           end_date: goal.end_date.toISOString().split('T')[0],
           duration_months: durationMonths,
-          kpi_count: goal.proposed_kpis?.length ?? 0,
-          kpi_approved: goal.proposed_kpis?.filter((kpi: typeof goal.proposed_kpis[0]) => kpi.is_approved).length ?? 0,
         };
       }),
       analysis_request: {

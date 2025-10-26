@@ -22,12 +22,13 @@ export async function POST(request: NextRequest) {
         { error: 'Invalid payload: kpi_id, user_id, and tasks are required' },
         { status: 400 }
       );
-    }
-
-    // Verify KPI exists and is approved
+    }    // Verify KPI exists and is approved
     const kpi = await prisma.proposed_kpis.findUnique({
       where: { kpi_id: body.kpi_id },
-      include: { strategic_goals: true },
+      include: { 
+        ai_recommended_roles: true,
+        proposed_breakdowns: true,
+      },
     });
 
     if (!kpi) {

@@ -25,8 +25,14 @@ interface Goal {
   end_date: string;
   status: string;
   created_at: string;
+  batch_id?: string;
   business_units?: {
     name: string;
+  };
+  analysis_batches?: {
+    batch_id: string;
+    batch_name: string;
+    status: string;
   };
 }
 
@@ -43,6 +49,85 @@ export default function GoalsPage() {
   const [pollingBatchId, setPollingBatchId] = useState<string | null>(null);
   const [pollingActive, setPollingActive] = useState(false);
   const [pollingAttempts, setPollingAttempts] = useState(0);
+
+  // Helper function to get user-friendly batch status
+  const getBatchStatusInfo = (batchStatus?: string) => {
+    if (!batchStatus) {
+      return {
+        label: 'Belum Dianalisa',
+        color: 'bg-gray-100 text-gray-700',
+        icon: '⏳',
+        description: 'Belum melalui analisa AI'
+      };
+    }    const statusMap: Record<string, { label: string; color: string; icon: string; description: string }> = {
+      'Draft': {
+        label: 'Draft',
+        color: 'bg-gray-100 text-gray-700',
+        icon: '📝',
+        description: 'Sedang dalam proses draft'
+      },
+      'kpi_loading': {
+        label: 'AI Sedang Memproses',
+        color: 'bg-purple-100 text-purple-700',
+        icon: '🔄',
+        description: 'AI sedang generate KPI (3-60 menit)'
+      },
+      'Analyzing': {
+        label: 'Sedang Dianalisa AI',
+        color: 'bg-blue-100 text-blue-700',
+        icon: '🤖',
+        description: 'AI sedang menganalisa'
+      },
+      'review_pending': {
+        label: 'Menunggu Review',
+        color: 'bg-yellow-100 text-yellow-700',
+        icon: '👀',
+        description: 'Perlu direview & disetujui'
+      },
+      'KPI_Assignment_Pending': {
+        label: 'KPI Sudah Dibuat',
+        color: 'bg-green-100 text-green-700',
+        icon: '✅',
+        description: 'Rekomendasi AI selesai'
+      },
+      'completed': {
+        label: 'Selesai',
+        color: 'bg-emerald-100 text-emerald-700',
+        icon: '🎉',
+        description: 'Workflow selesai'
+      },
+    };
+
+    return statusMap[batchStatus] || {
+      label: batchStatus,
+      color: 'bg-gray-100 text-gray-700',
+      icon: '❓',
+      description: 'Status tidak diketahui'
+    };
+  };
+
+  // Helper function to get action button for batch
+  const getBatchAction = (goal: Goal) => {    if (!goal.analysis_batches?.batch_id) return null;
+
+    const status = goal.analysis_batches.status;
+    
+    if (status === 'review_pending') {
+      return {
+        label: '👀 Review Sekarang',
+        url: `/dashboard/review/${goal.analysis_batches.batch_id}`,
+        color: 'bg-yellow-500 hover:bg-yellow-600 text-white'
+      };
+    }
+      if (status === 'KPI_Assignment_Pending') {
+      return {
+        label: '✅ Lihat KPIs',
+        url: `/dashboard/kpis/${goal.analysis_batches.batch_id}`,
+        color: 'bg-green-500 hover:bg-green-600 text-white'
+      };
+    }
+
+    return null;
+  };
 
   useEffect(() => {
     fetchGoals();
@@ -389,52 +474,86 @@ export default function GoalsPage() {
                   Create Your First Goal
                 </button>
               </div>
-            ) : (
-              <div className="divide-y divide-gray-200">
-                {goals.map((goal) => (
-                  <div
-                    key={goal.goal_id}
-                    onClick={() => handleGoalClick(goal)}
-                    className="p-6 hover:bg-gray-50 cursor-pointer transition-colors"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                          {goal.goal_name}
-                        </h3>
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span className="flex items-center gap-2">
-                            <FontAwesomeIcon icon={faBullseye} className="w-4 h-4" />
-                            {goal.target_value} {goal.target_unit}
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <FontAwesomeIcon icon={faCalendar} className="w-4 h-4" />
-                            {new Date(goal.start_date).toLocaleDateString('id-ID', { 
-                              day: '2-digit', 
-                              month: 'short', 
-                              year: 'numeric' 
-                            })}
-                            {' - '}
-                            {new Date(goal.end_date).toLocaleDateString('id-ID', { 
-                              day: '2-digit', 
-                              month: 'short', 
-                              year: 'numeric' 
-                            })}
-                          </span>
-                          {goal.business_units && (
+            ) : (              <div className="divide-y divide-gray-200">
+                {goals.map((goal) => {
+                  const batchStatus = getBatchStatusInfo(goal.analysis_batches?.status);
+                  const batchAction = getBatchAction(goal);
+                  
+                  return (
+                    <div
+                      key={goal.goal_id}
+                      className="p-6 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex justify-between items-start gap-4">
+                        <div 
+                          className="flex-1 cursor-pointer"
+                          onClick={() => handleGoalClick(goal)}
+                        >
+                          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                            {goal.goal_name}
+                          </h3>
+                          <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
                             <span className="flex items-center gap-2">
-                              <FontAwesomeIcon icon={faBuilding} className="w-4 h-4" />
-                              {goal.business_units.name}
+                              <FontAwesomeIcon icon={faBullseye} className="w-4 h-4" />
+                              {goal.target_value} {goal.target_unit}
                             </span>
+                            <span className="flex items-center gap-2">
+                              <FontAwesomeIcon icon={faCalendar} className="w-4 h-4" />
+                              {new Date(goal.start_date).toLocaleDateString('id-ID', { 
+                                day: '2-digit', 
+                                month: 'short', 
+                                year: 'numeric' 
+                              })}
+                              {' - '}
+                              {new Date(goal.end_date).toLocaleDateString('id-ID', { 
+                                day: '2-digit', 
+                                month: 'short', 
+                                year: 'numeric' 
+                              })}
+                            </span>
+                            {goal.business_units && (
+                              <span className="flex items-center gap-2">
+                                <FontAwesomeIcon icon={faBuilding} className="w-4 h-4" />
+                                {goal.business_units.name}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Batch Status Indicator */}
+                          {goal.analysis_batches && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${batchStatus.color}`}>
+                                <span>{batchStatus.icon}</span>
+                                <span>{batchStatus.label}</span>
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {batchStatus.description}
+                              </span>
+                            </div>
                           )}
                         </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2">
+                          {batchAction && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(batchAction.url);
+                              }}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${batchAction.color}`}
+                            >
+                              {batchAction.label}
+                            </button>
+                          )}
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${getStatusColor(goal.status)}`}>
+                            {goal.status}
+                          </span>
+                        </div>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${getStatusColor(goal.status)}`}>
-                        {goal.status}
-                      </span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

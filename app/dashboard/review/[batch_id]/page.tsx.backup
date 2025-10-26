@@ -35,17 +35,27 @@ export default function ReviewDetailPage() {
   const batch_id = params.batch_id as string;
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
   const [breakdowns, setBreakdowns] = useState<Breakdown[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);  const [isLoading, setIsLoading] = useState(true);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-  const [aiProgress, setAiProgress] = useState(''); // Progress message for AI generation
-  const [aiSuccess, setAiSuccess] = useState(false); // Show success message when AI completes
-  const [pollCount, setPollCount] = useState(0); // Track polling attempts
   const [activeTab, setActiveTab] = useState<'tim' | 'breakdown' | 'aset'>('tim');
-  const [hasApproved, setHasApproved] = useState(false); // Track if user has saved at least once
+  
+  // New state for polling after submit
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [pollingIntervalId, setPollingIntervalId] = useState<number | null>(null);
   useEffect(() => {
-    if (!batch_id) return;    fetchBatchData();
+    if (!batch_id) return;
+
+    fetchBatchData();
   }, [batch_id]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, []);
 
   const fetchBatchData = async () => {
     try {
@@ -57,15 +67,6 @@ export default function ReviewDetailPage() {
       }
 
       const data = await response.json();
-      
-      // Check if AI is currently processing (status = kpi_loading)
-      if (data.status === 'kpi_loading') {
-        console.log('🤖 Detected AI is processing (status: kpi_loading). Starting polling...');
-        setIsGeneratingAI(true);
-        setPollCount(0);
-        setAiProgress('🔄 AI sedang memproses... Checking status...');
-        startPolling(); // Start polling immediately
-      }
       
       // Set team roles (now editable)
       setTeamRoles(data.ai_recommended_roles || []);
@@ -171,91 +172,6 @@ export default function ReviewDetailPage() {
     setAssets(updatedAssets);
   };
 
-  // Polling function - can be called from multiple places
-  const startPolling = () => {
-    console.log('🔄 Starting polling for batch status...');
-    
-    const pollInterval = setInterval(async () => {
-      try {
-        // Update poll count and calculate elapsed time
-        let currentElapsedDisplay = '';
-        setPollCount(prev => {
-          const newCount = prev + 1;
-          const elapsedSeconds = newCount * 15;
-          const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-          const remainingSeconds = elapsedSeconds % 60;
-          
-          currentElapsedDisplay = elapsedMinutes > 0 
-            ? `${elapsedMinutes}m ${remainingSeconds}s`
-            : `${elapsedSeconds}s`;
-          
-          console.log(`🔄 Polling batch status... (attempt ${newCount}, ${currentElapsedDisplay} elapsed)`);
-          
-          return newCount;
-        });
-        
-        setAiProgress(`🔄 Checking status... (${currentElapsedDisplay} elapsed)`);
-        
-        // Check batch status via API
-        const statusResponse = await fetch(`/api/check-status/${batch_id}`);
-        if (!statusResponse.ok) {
-          console.error('Failed to check status:', statusResponse.status);
-          return; // Continue polling
-        }
-        
-        const statusData = await statusResponse.json();
-        console.log('Current batch status:', statusData.status);
-        
-        // ONLY stop polling if status changed from "kpi_loading" to "KPI_Assignment_Pending"
-        if (statusData.status === 'KPI_Assignment_Pending') {
-          console.log('✅ Status changed to KPI_Assignment_Pending! Fetching data...');
-          setAiProgress('✅ AI selesai! Fetching data baru...');
-          
-          // Fetch updated data
-          const dataResponse = await fetch(`/api/review/${batch_id}`);
-          if (!dataResponse.ok) {
-            console.error('Failed to fetch data:', dataResponse.status);
-            return; // Continue polling
-          }
-          
-          const data = await dataResponse.json();
-          
-          // Update state with new AI-generated data
-          setTeamRoles(data.ai_recommended_roles || []);
-          
-          const breakdownsData = (data.proposed_breakdowns || []).map((b: any) => ({
-            ...b,
-            value: typeof b.value === 'string' ? Number(b.value) : b.value,
-          }));
-          setBreakdowns(breakdownsData);
-
-          const assetsData = (data.batch_managed_assets || []).map((a: any) => ({
-            ...a,
-            metric_value: a.metric_value && typeof a.metric_value === 'string' ? Number(a.metric_value) : a.metric_value,
-          }));
-          setAssets(assetsData);
-
-          // Stop polling - AI is done
-          clearInterval(pollInterval);
-          setIsGeneratingAI(false);
-          setAiProgress('');
-          setPollCount(0);
-          setAiSuccess(true); // Show success message
-          
-          // Hide success message after 5 seconds
-          setTimeout(() => {
-            setAiSuccess(false);
-          }, 5000);
-          
-          console.log('✅ AI workflow completed successfully!');
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-        // Don't stop polling on error, just log and continue
-      }
-    }, 15000); // Poll every 15 seconds
-  };
-
   const handleAIRecommendation = async () => {
     // Check if data has been saved first
     if (teamRoles.length === 0 || breakdowns.length === 0) {
@@ -269,84 +185,114 @@ export default function ReviewDetailPage() {
 
     try {
       setIsGeneratingAI(true);
-      setPollCount(0);
-      setAiProgress('🚀 Mengirim request ke AI workflow...');
-      console.log('=== Triggering AI Recommendation ===');
-      console.log('Batch ID:', batch_id);
 
-      // Call our backend proxy API to trigger n8n (avoids CORS)
-      const triggerResponse = await fetch(`/api/trigger-ai-breakdown/${batch_id}`, {
+      // Trigger n8n Workflow #2 (KPI Breakdown) webhook - send only batch_id
+      const n8nWebhookUrl = process.env.NEXT_PUBLIC_N8N_WORKFLOW_2_WEBHOOK_URL || 'https://n8n.drwapp.com/webhook/hrisnextgen-kpi-breakdown';
+      
+      const triggerResponse = await fetch(n8nWebhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify(batch_id), // Send only batch_id as string
       });
 
-      console.log('Response status:', triggerResponse.status);
-      console.log('Response ok:', triggerResponse.ok);
-
-      // Get response as text first to handle any format
-      const responseText = await triggerResponse.text();
-      console.log('Response text:', responseText);
-      console.log('Response text length:', responseText.length);
-
       if (!triggerResponse.ok) {
-        let errorData;
+        throw new Error('Failed to trigger AI workflow');
+      }
+
+      alert('AI sedang memproses rekomendasi. Halaman akan otomatis refresh setiap 5 detik.');
+
+      // Start polling for updates
+      const pollInterval = setInterval(async () => {
         try {
-          if (!responseText || responseText.trim() === '') {
-            errorData = { 
-              message: `Server returned empty response with status ${triggerResponse.status}`,
-              status: triggerResponse.status 
-            };
-          } else {
-            errorData = JSON.parse(responseText);
+          const response = await fetch(`/api/review/${batch_id}`);
+          if (response.ok) {
+            const data = await response.json();
+            
+            // Check if AI has generated new data
+            if (data.ai_recommended_roles && data.ai_recommended_roles.length > 0) {
+              // Update state with new data
+              setTeamRoles(data.ai_recommended_roles || []);
+              
+              const breakdownsData = (data.proposed_breakdowns || []).map((b: any) => ({
+                ...b,
+                value: typeof b.value === 'string' ? Number(b.value) : b.value,
+              }));
+              setBreakdowns(breakdownsData);
+
+              const assetsData = (data.batch_managed_assets || []).map((a: any) => ({
+                ...a,
+                metric_value: a.metric_value && typeof a.metric_value === 'string' ? Number(a.metric_value) : a.metric_value,
+              }));
+              setAssets(assetsData);
+
+              // Stop polling
+              clearInterval(pollInterval);
+              setIsGeneratingAI(false);
+              alert('Rekomendasi AI berhasil di-generate!');
+            }
           }
-        } catch (e) {
-          errorData = { 
-            message: responseText || `Failed to trigger AI workflow: ${triggerResponse.status}`,
-            parseError: e instanceof Error ? e.message : 'Unknown parse error'
-          };
+        } catch (error) {
+          console.error('Polling error:', error);
         }
-        console.error('Error response:', errorData);
-        throw new Error(errorData.message || errorData.error || `Failed to trigger AI workflow: ${triggerResponse.status}`);
-      }
+      }, 5000); // Poll every 5 seconds
 
-      // Parse response data
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-        console.log('API response:', responseData);
-      } catch (e) {
-        console.error('Failed to parse response as JSON:', e);
-        throw new Error('Invalid response format from server: ' + responseText.substring(0, 100));
-      }
-
-      setAiProgress('✅ Workflow triggered! AI sedang menganalisis data...');
-      alert('🤖 AI sedang memproses rekomendasi KPI. Halaman akan otomatis check status setiap 15 detik.\n\n⏱️ Estimasi waktu: 3 menit - 1 jam tergantung kompleksitas data.\n\nAnda bisa meninggalkan halaman ini dan kembali lagi nanti.');
-
-      // Start polling
-      startPolling();
-
-      // No timeout - let it run until completion
-      // AI processing can take 3 minutes to 1 hour depending on data complexity
+      // Stop polling after 2 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setIsGeneratingAI(false);
+        alert('Timeout: Silakan refresh halaman secara manual jika data belum muncul.');
+      }, 120000);
 
     } catch (error) {
-      console.error('=== Error triggering AI ===');
-      console.error('Error details:', error);
-      
-      let errorMessage = 'Gagal trigger AI recommendation. ';
-      if (error instanceof Error) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Silakan coba lagi atau hubungi admin.';
-      }
-      
-      alert(errorMessage);
+      console.error('Error triggering AI:', error);
+      alert('Gagal trigger AI recommendation. Silakan coba lagi.');
       setIsGeneratingAI(false);
-      setAiProgress('');
-      setPollCount(0);
     }
   };
+
+  // Polling functions for checking status after approval
+  const stopPolling = () => {
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      setPollingIntervalId(null);
+    }
+  };
+
+  const checkStatus = async (batchId: string) => {
+    try {
+      const response = await fetch(`/api/check-status/${batchId}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to check status');
+      }
+
+      const data = await response.json();
+      
+      if (data.status === 'KPI_Assignment_Pending') {
+        stopPolling();
+        setIsProcessing(false);
+        alert('Rincian KPI siap ditugaskan!');
+        router.push('/dashboard/assign/' + batchId);
+      }
+    } catch (error) {
+      console.error('Error checking status:', error);
+    }
+  };
+
+  const startPolling = (batchId: string) => {
+    // Check immediately first
+    checkStatus(batchId);
+    
+    // Then poll every 5 seconds
+    const intervalId = window.setInterval(() => {
+      checkStatus(batchId);
+    }, 5000);
+    
+    setPollingIntervalId(intervalId);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -401,13 +347,13 @@ export default function ReviewDetailPage() {
       }
 
       const result = await response.json();
-      setIsSaving(false);
-      setHasApproved(true); // Enable AI button
       
-      alert('Data berhasil disimpan! Sekarang Anda bisa klik "🤖 Rekomendasi AI" jika ingin generate ulang.');
+      alert('Perubahan disimpan! Memulai AI Workflow #2...');
+      router.push('/dashboard/goals');
     } catch (error) {
       console.error('Error saving data:', error);
       alert('Gagal menyimpan perubahan. Silakan coba lagi.');
+    } finally {
       setIsSaving(false);
     }
   };
@@ -499,7 +445,9 @@ export default function ReviewDetailPage() {
             <div>
               <p className="text-sm text-gray-600 mb-4">
                 Edit rekomendasi role dari AI. Anda bisa menambah, mengedit, atau menghapus role.
-              </p>              {/* Action Buttons - Moved to Top */}
+              </p>
+
+              {/* Action Buttons - Moved to Top */}
               <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex gap-3">
                   <button
@@ -512,9 +460,8 @@ export default function ReviewDetailPage() {
                   <button
                     type="button"
                     onClick={handleAIRecommendation}
-                    disabled={isGeneratingAI || !hasApproved}
+                    disabled={isGeneratingAI}
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!hasApproved ? "Simpan & setujui data terlebih dahulu sebelum generate ulang rekomendasi AI" : "Generate ulang rekomendasi AI"}
                   >
                     {isGeneratingAI ? (
                       <>
@@ -522,7 +469,8 @@ export default function ReviewDetailPage() {
                         Generating AI...
                       </>
                     ) : (
-                      <>🤖 Rekomendasi AI</>                  )}
+                      <>🤖 Rekomendasi AI</>
+                    )}
                   </button>
                 </div>
 
@@ -534,7 +482,6 @@ export default function ReviewDetailPage() {
                   >
                     Batal
                   </button>
-                  
                   <button
                     type="button"
                     onClick={handleSubmit}
@@ -547,50 +494,11 @@ export default function ReviewDetailPage() {
                         Menyimpan...
                       </>
                     ) : (
-                      <>💾 Simpan & Setujui</>
+                      <>💾 Simpan Semua</>
                     )}
                   </button>
                 </div>
               </div>
-
-              {/* AI Success Message */}
-              {aiSuccess && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-400 rounded-lg animate-pulse">
-                  <div className="flex items-center gap-3">
-                    <div className="text-3xl">✅</div>
-                    <div className="flex-1">
-                      <p className="text-green-900 font-bold text-lg">Rekomendasi AI Berhasil Di-generate!</p>
-                      <p className="text-sm text-green-700 mt-1">
-                        Silakan review hasil KPI yang baru di bawah ini. Data telah diperbarui.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* AI Progress Indicator */}
-              {isGeneratingAI && aiProgress && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="animate-spin rounded-full h-6 w-6 border-3 border-purple-600 border-t-transparent"></div>
-                    <div className="flex-1">
-                      <p className="text-purple-900 font-medium">{aiProgress}</p>
-                      <p className="text-sm text-purple-700 mt-1">
-                        ⏱️ Proses ini bisa memakan waktu 3 menit - 1 jam tergantung kompleksitas data.
-                      </p>
-                      <p className="text-xs text-purple-600 mt-1">
-                        💡 Anda bisa meninggalkan halaman ini dan kembali lagi nanti.
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-purple-600">Polling: {pollCount} × 15s</p>
-                      <p className="text-xs text-purple-600 font-medium">
-                        {Math.floor((pollCount * 15) / 60)}m {(pollCount * 15) % 60}s elapsed
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div className="space-y-4 mb-6">
                 {teamRoles.length === 0 ? (
@@ -656,7 +564,9 @@ export default function ReviewDetailPage() {
             <div>
               <p className="text-sm text-gray-600 mb-4">
                 Edit target breakdown di bawah ini sesuai kebutuhan. Anda bisa menambah, mengedit, atau menghapus baris.
-              </p>              {/* Action Buttons - Moved to Top */}
+              </p>
+
+              {/* Action Buttons - Moved to Top */}
               <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex gap-3">
                   <button
@@ -669,9 +579,8 @@ export default function ReviewDetailPage() {
                   <button
                     type="button"
                     onClick={handleAIRecommendation}
-                    disabled={isGeneratingAI || !hasApproved}
+                    disabled={isGeneratingAI}
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!hasApproved ? "Simpan & setujui data terlebih dahulu sebelum generate ulang rekomendasi AI" : "Generate ulang rekomendasi AI"}
                   >
                     {isGeneratingAI ? (
                       <>
@@ -682,7 +591,9 @@ export default function ReviewDetailPage() {
                       <>🤖 Rekomendasi AI</>
                     )}
                   </button>
-                </div><div className="flex gap-3">
+                </div>
+
+                <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => router.push('/dashboard/review')}
@@ -690,7 +601,6 @@ export default function ReviewDetailPage() {
                   >
                     Batal
                   </button>
-                  
                   <button
                     type="button"
                     onClick={handleSubmit}
@@ -703,50 +613,11 @@ export default function ReviewDetailPage() {
                         Menyimpan...
                       </>
                     ) : (
-                      <>💾 Simpan & Setujui</>
+                      <>💾 Simpan Semua</>
                     )}
                   </button>
                 </div>
               </div>
-
-              {/* AI Success Message */}
-              {aiSuccess && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-400 rounded-lg animate-pulse">
-                  <div className="flex items-center gap-3">
-                    <div className="text-3xl">✅</div>
-                    <div className="flex-1">
-                      <p className="text-green-900 font-bold text-lg">Rekomendasi AI Berhasil Di-generate!</p>
-                      <p className="text-sm text-green-700 mt-1">
-                        Silakan review hasil KPI yang baru di bawah ini. Data telah diperbarui.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* AI Progress Indicator */}
-              {isGeneratingAI && aiProgress && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="animate-spin rounded-full h-6 w-6 border-3 border-purple-600 border-t-transparent"></div>
-                    <div className="flex-1">
-                      <p className="text-purple-900 font-medium">{aiProgress}</p>
-                      <p className="text-sm text-purple-700 mt-1">
-                        ⏱️ Proses ini bisa memakan waktu 3 menit - 1 jam tergantung kompleksitas data.
-                      </p>
-                      <p className="text-xs text-purple-600 mt-1">
-                        💡 Anda bisa meninggalkan halaman ini dan kembali lagi nanti.
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-purple-600">Polling: {pollCount} × 15s</p>
-                      <p className="text-xs text-purple-600 font-medium">
-                        {Math.floor((pollCount * 15) / 60)}m {(pollCount * 15) % 60}s elapsed
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <form onSubmit={handleSubmit}>
                 <div className="space-y-4 mb-6">
@@ -871,7 +742,9 @@ export default function ReviewDetailPage() {
             <div>
               <p className="text-sm text-gray-600 mb-4">
                 Edit managed assets yang terkait dengan strategi ini. Tambah, edit, atau hapus aset.
-              </p>              {/* Action Buttons - Moved to Top */}
+              </p>
+
+              {/* Action Buttons - Moved to Top */}
               <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex gap-3">
                   <button
@@ -884,9 +757,8 @@ export default function ReviewDetailPage() {
                   <button
                     type="button"
                     onClick={handleAIRecommendation}
-                    disabled={isGeneratingAI || !hasApproved}
+                    disabled={isGeneratingAI}
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!hasApproved ? "Simpan & setujui data terlebih dahulu sebelum generate ulang rekomendasi AI" : "Generate ulang rekomendasi AI"}
                   >
                     {isGeneratingAI ? (
                       <>
@@ -894,7 +766,8 @@ export default function ReviewDetailPage() {
                         Generating AI...
                       </>
                     ) : (
-                      <>🤖 Rekomendasi AI</>                  )}
+                      <>🤖 Rekomendasi AI</>
+                    )}
                   </button>
                 </div>
 
@@ -906,7 +779,6 @@ export default function ReviewDetailPage() {
                   >
                     Batal
                   </button>
-                  
                   <button
                     type="button"
                     onClick={handleSubmit}
@@ -919,50 +791,11 @@ export default function ReviewDetailPage() {
                         Menyimpan...
                       </>
                     ) : (
-                      <>💾 Simpan & Setujui</>
+                      <>💾 Simpan Semua</>
                     )}
                   </button>
                 </div>
               </div>
-
-              {/* AI Success Message */}
-              {aiSuccess && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-400 rounded-lg animate-pulse">
-                  <div className="flex items-center gap-3">
-                    <div className="text-3xl">✅</div>
-                    <div className="flex-1">
-                      <p className="text-green-900 font-bold text-lg">Rekomendasi AI Berhasil Di-generate!</p>
-                      <p className="text-sm text-green-700 mt-1">
-                        Silakan review hasil KPI yang baru di bawah ini. Data telah diperbarui.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* AI Progress Indicator */}
-              {isGeneratingAI && aiProgress && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="animate-spin rounded-full h-6 w-6 border-3 border-purple-600 border-t-transparent"></div>
-                    <div className="flex-1">
-                      <p className="text-purple-900 font-medium">{aiProgress}</p>
-                      <p className="text-sm text-purple-700 mt-1">
-                        ⏱️ Proses ini bisa memakan waktu 3 menit - 1 jam tergantung kompleksitas data.
-                      </p>
-                      <p className="text-xs text-purple-600 mt-1">
-                        💡 Anda bisa meninggalkan halaman ini dan kembali lagi nanti.
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-purple-600">Polling: {pollCount} × 15s</p>
-                      <p className="text-xs text-purple-600 font-medium">
-                        {Math.floor((pollCount * 15) / 60)}m {(pollCount * 15) % 60}s elapsed
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div className="space-y-4 mb-6">
                 {assets.length === 0 ? (
@@ -1017,7 +850,9 @@ export default function ReviewDetailPage() {
                           placeholder="@username, URL"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                         />
-                      </div>                      {/* Delete Button */}
+                      </div>
+
+                      {/* Delete Button */}
                       <div className="col-span-12 sm:col-span-1 flex items-end sm:order-last">
                         <button
                           type="button"
@@ -1030,7 +865,7 @@ export default function ReviewDetailPage() {
                       </div>
 
                       {/* Metric Name */}
-                      <div className="col-span-6 sm:col-span-4">
+                      <div className="col-span-6 sm:col-span-4"></div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           Metric Name
                         </label>

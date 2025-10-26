@@ -30,6 +30,17 @@ interface CreatedKPI {
 
 export async function POST(request: NextRequest) {
   try {
+    // This webhook is deprecated - KPIs are now created via n8n workflow #2
+    // which uses the /api/webhooks/strategy-breakdown endpoint
+    return NextResponse.json(
+      { 
+        error: 'This endpoint is deprecated',
+        message: 'Please use /api/webhooks/strategy-breakdown instead'
+      },
+      { status: 410 } // Gone
+    );
+
+    /* DEPRECATED CODE - Keeping for reference
     const body: KPIGenerationPayload = await request.json();
 
     // Validate payload
@@ -59,12 +70,9 @@ export async function POST(request: NextRequest) {
             goal_id: body.goal_id,
             suggested_role_id: kpi.suggested_role_id,
             kpi_description: kpi.kpi_description,
-            target_bulanan: kpi.target_bulanan ? BigInt(kpi.target_bulanan) : null,
-            platform: kpi.platform || null,
+            target_bulanan: kpi.target_bulanan ? BigInt(kpi.target_bulanan) : null,            platform: kpi.platform || null,
             source: kpi.source || null,
             is_approved: false,
-            breakdown_id: null,
-            role_recommendation_id: null,
           },
         })
       )
@@ -75,12 +83,12 @@ export async function POST(request: NextRequest) {
         kpis: createdKPIs.map((k: typeof createdKPIs[0]) => ({
           ...k,
           target_bulanan: k.target_bulanan?.toString(),
-        })),
-      },
+        })),      },
       { status: 201 }
     );
+    */
   } catch (error) {
-    console.error('Error creating KPIs:', error);
+    console.error('Error in deprecated KPI generation webhook:', error);
     return NextResponse.json(
       { error: 'Failed to create KPIs' },
       { status: 500 }

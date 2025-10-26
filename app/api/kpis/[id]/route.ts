@@ -8,18 +8,16 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const body: UpdateKPIInput = await request.json();
-
-    const kpi = await prisma.proposed_kpis.update({
+    const body: UpdateKPIInput = await request.json();    const kpi = await prisma.proposed_kpis.update({
       where: { kpi_id: id },
       data: {
         assigned_user_id: body.assigned_user_id,
         is_approved: body.is_approved,
       },
       include: {
-        users: true,
-        roles: true,
-        strategic_goals: true,
+        assigned_user: true,
+        ai_recommended_roles: true,
+        proposed_breakdowns: true,
       },
     });
 

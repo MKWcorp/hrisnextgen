@@ -27,11 +27,6 @@ const navItems = [
     badge: true, // Will show notification badge
   },
   {
-    name: 'KPI Approval',
-    href: '/dashboard/kpis',
-    icon: '✅',
-  },
-  {
     name: 'Analytics',
     href: '/dashboard/analytics',
     icon: '📊',

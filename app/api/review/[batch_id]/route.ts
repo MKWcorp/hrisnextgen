@@ -98,11 +98,19 @@ export async function POST(
   { params }: { params: Promise<{ batch_id: string }> }
 ) {
   try {
+    console.log('=== POST /api/review/[batch_id] START ===');
+    
     // Await params in Next.js 15+
     const { batch_id } = await params;
+    console.log('Batch ID:', batch_id);
     
     // Get edited data from request body
     const { teamRoles, breakdowns, assets } = await request.json();
+    console.log('Received data:', {
+      teamRoles: teamRoles.length,
+      breakdowns: breakdowns.length,
+      assets: assets.length,
+    });
 
     if (!teamRoles || !Array.isArray(teamRoles)) {
       return NextResponse.json(
@@ -123,8 +131,12 @@ export async function POST(
         { error: 'Invalid data', message: 'Assets array is required' },
         { status: 400 }
       );
-    }    // Use transaction for safe operations - OPTIMIZED with upsert instead of delete+create
+    }    console.log('Starting database transaction...');
+    
+    // Use transaction for safe operations - OPTIMIZED with upsert instead of delete+create
     await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => {
+      console.log('Fetching existing records...');
+      
       // Get existing IDs to determine what to update vs create
       const existingRoles = await tx.ai_recommended_roles.findMany({
         where: { batch_id: batch_id },
@@ -137,11 +149,12 @@ export async function POST(
       const existingAssets = await tx.batch_managed_assets.findMany({
         where: { batch_id: batch_id },
         select: { asset_id: true },
-      });
-
-      // TEAM ROLES: Update existing, create new, delete removed
+      });      // TEAM ROLES: Update existing, create new, delete removed
+      console.log('Processing team roles...');
       const roleIdsFromFrontend = teamRoles.filter((r: any) => r.role_recommendation_id).map((r: any) => r.role_recommendation_id);
       const rolesToDelete = existingRoles.filter(r => !roleIdsFromFrontend.includes(r.role_recommendation_id));
+      
+      console.log(`Roles: ${teamRoles.length} from frontend, ${existingRoles.length} existing, ${rolesToDelete.length} to delete`);
       
       if (rolesToDelete.length > 0) {
         await tx.ai_recommended_roles.deleteMany({
@@ -169,11 +182,12 @@ export async function POST(
             },
           });
         }
-      }
-
-      // BREAKDOWNS: Update existing, create new, delete removed
+      }      // BREAKDOWNS: Update existing, create new, delete removed
+      console.log('Processing breakdowns...');
       const breakdownIdsFromFrontend = breakdowns.filter((b: any) => b.breakdown_id).map((b: any) => b.breakdown_id);
       const breakdownsToDelete = existingBreakdowns.filter(b => !breakdownIdsFromFrontend.includes(b.breakdown_id));
+      
+      console.log(`Breakdowns: ${breakdowns.length} from frontend, ${existingBreakdowns.length} existing, ${breakdownsToDelete.length} to delete`);
       
       if (breakdownsToDelete.length > 0) {
         await tx.proposed_breakdowns.deleteMany({
@@ -205,11 +219,12 @@ export async function POST(
             },
           });
         }
-      }
-
-      // ASSETS: Update existing, create new, delete removed
+      }      // ASSETS: Update existing, create new, delete removed
+      console.log('Processing assets...');
       const assetIdsFromFrontend = assets.filter((a: any) => a.asset_id).map((a: any) => a.asset_id);
       const assetsToDelete = existingAssets.filter(a => !assetIdsFromFrontend.includes(a.asset_id));
+      
+      console.log(`Assets: ${assets.length} from frontend, ${existingAssets.length} existing, ${assetsToDelete.length} to delete`);
       
       if (assetsToDelete.length > 0) {
         await tx.batch_managed_assets.deleteMany({
@@ -242,46 +257,37 @@ export async function POST(
               batch_id: batch_id,
             },
           });
-        }
-      }
+        }      }
 
-      // Update batch status
-      await tx.analysis_batches.update({
-        where: { batch_id: batch_id },
-        data: { status: 'kpi_breakdown_pending' },
-      });
+      // Don't update status here! Let n8n workflow update it when AI completes.
+      // Status remains 'review_pending' or 'Analyzing' depending on current state.
+      console.log('Keeping batch status as is. Only n8n can change to KPI_Assignment_Pending.');
+      
+      console.log('Transaction completed successfully!');
     });
 
-    // Step 6: Trigger n8n Workflow #2 webhook
-    const n8nWebhookUrl = process.env.N8N_WORKFLOW_2_WEBHOOK_URL || 'https://n8n.drwapp.com/webhook/hrisnextgen-kpi-breakdown';
-    
-    try {
-      await fetch(n8nWebhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          batch_id: batch_id,
-        }),
-      });
-    } catch (webhookError) {
-      console.error('Failed to trigger n8n webhook:', webhookError);
-      // Continue anyway - webhook failure shouldn't stop the process
-    }
+    // NOTE: We don't trigger n8n webhook here anymore.
+    // User can manually trigger AI recommendation if they want to regenerate KPI breakdowns.
+    // This allows quick saves without waiting for AI processing.
+    // Status will only change to 'KPI_Assignment_Pending' when n8n workflow completes.
 
+    console.log('=== POST /api/review/[batch_id] SUCCESS ===');
     return NextResponse.json(
       {
         success: true,
-        message: 'Team roles, breakdowns, and assets saved successfully, KPI breakdown workflow triggered',
+        message: 'Team roles, breakdowns, and assets saved successfully',
         batch_id: batch_id,
+        // Don't return new status - it hasn't changed
       },
       { status: 200 }
-    );
-  } catch (error) {
+    );} catch (error) {
+    console.error('=== POST /api/review/[batch_id] ERROR ===');
     console.error('Error saving data:', error);
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    
     return NextResponse.json(
-      { error: 'Internal server error', message: 'Failed to save data' },
+      { error: 'Internal server error', message: 'Failed to save data', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

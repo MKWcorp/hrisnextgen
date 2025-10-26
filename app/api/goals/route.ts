@@ -32,39 +32,40 @@ interface Goal {
     name: string;
     description?: string | null;
   } | null;
-  proposed_kpis: KPI[];
+  analysis_batches?: {
+    batch_id: string;
+    batch_name: string;
+    status: string;
+  } | null;
+  proposed_kpis?: KPI[]; // Made optional since relation changed
 }
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const batchId = searchParams.get('batch_id');
-
-    const goals: Goal[] = await prisma.strategic_goals.findMany({
+    const batchId = searchParams.get('batch_id');    const goals: Goal[] = await prisma.strategic_goals.findMany({
       where: batchId ? { batch_id: batchId } : undefined,
       include: {
         business_units: true,
-        proposed_kpis: {
-          include: {
-            users: true,
-            roles: true,
+        analysis_batches: {
+          select: {
+            batch_id: true,
+            batch_name: true,
+            status: true,
           },
         },
+        // Note: proposed_kpis relation may not exist in strategic_goals
+        // This is based on analysis_batches now
       },
       orderBy: {
         created_at: 'desc',
       },
-    });
-
-    // Serialize BigInt fields
+    });    // Serialize BigInt fields
     const serializedGoals = goals.map((goal: Goal) => ({
       ...goal,
       target_value: goal.target_value.toString(),
-      proposed_kpis: goal.proposed_kpis.map((kpi: KPI) => ({
-        ...kpi,
-        target_bulanan: kpi.target_bulanan?.toString(),
-      })),
-    }));    return NextResponse.json(serializedGoals);
+      proposed_kpis: goal.proposed_kpis || [], // Empty array since relation changed or use existing
+    }));return NextResponse.json(serializedGoals);
   } catch (error) {
     console.error('Error fetching goals:', error);
     console.error('Error details:', error instanceof Error ? error.message : String(error));

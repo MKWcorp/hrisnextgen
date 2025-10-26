@@ -14,12 +14,12 @@ export async function GET(request: NextRequest) {
         ...(userId && { user_id: userId }),
         ...(taskDate && { task_date: new Date(taskDate) }),
         ...(isCompleted !== null && { is_completed: isCompleted === 'true' }),
-      },
-      include: {
+      },      include: {
         users: true,
         proposed_kpis: {
           include: {
-            strategic_goals: true,
+            ai_recommended_roles: true,
+            proposed_breakdowns: true,
           },
         },
       },

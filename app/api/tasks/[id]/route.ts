@@ -11,8 +11,7 @@ export async function PATCH(
     const body: UpdateTaskInput = await request.json();
 
     const task = await prisma.daily_tasks.update({
-      where: { task_id: id },
-      data: {
+      where: { task_id: id },      data: {
         is_completed: body.is_completed,
         completed_at: body.is_completed ? new Date() : null,
       },
@@ -20,7 +19,8 @@ export async function PATCH(
         users: true,
         proposed_kpis: {
           include: {
-            strategic_goals: true,
+            ai_recommended_roles: true,
+            proposed_breakdowns: true,
           },
         },
       },
