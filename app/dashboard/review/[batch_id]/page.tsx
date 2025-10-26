@@ -33,7 +33,6 @@ export default function ReviewDetailPage() {
   const params = useParams();
   const router = useRouter();
   const batch_id = params.batch_id as string;
-
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
   const [breakdowns, setBreakdowns] = useState<Breakdown[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -41,12 +40,22 @@ export default function ReviewDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [activeTab, setActiveTab] = useState<'tim' | 'breakdown' | 'aset'>('tim');
-
+  
+  // New state for polling after submit
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [pollingIntervalId, setPollingIntervalId] = useState<number | null>(null);
   useEffect(() => {
     if (!batch_id) return;
 
     fetchBatchData();
   }, [batch_id]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, []);
 
   const fetchBatchData = async () => {
     try {
@@ -243,6 +252,47 @@ export default function ReviewDetailPage() {
     }
   };
 
+  // Polling functions for checking status after approval
+  const stopPolling = () => {
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      setPollingIntervalId(null);
+    }
+  };
+
+  const checkStatus = async (batchId: string) => {
+    try {
+      const response = await fetch(`/api/check-status/${batchId}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to check status');
+      }
+
+      const data = await response.json();
+      
+      if (data.status === 'KPI_Assignment_Pending') {
+        stopPolling();
+        setIsProcessing(false);
+        alert('Rincian KPI siap ditugaskan!');
+        router.push('/dashboard/assign/' + batchId);
+      }
+    } catch (error) {
+      console.error('Error checking status:', error);
+    }
+  };
+
+  const startPolling = (batchId: string) => {
+    // Check immediately first
+    checkStatus(batchId);
+    
+    // Then poll every 5 seconds
+    const intervalId = window.setInterval(() => {
+      checkStatus(batchId);
+    }, 5000);
+    
+    setPollingIntervalId(intervalId);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -275,10 +325,9 @@ export default function ReviewDetailPage() {
     if (hasEmptyAssets) {
       alert('Semua field Asset (Category, Name) harus diisi!');
       return;
-    }
-
-    try {
+    }    try {
       setIsSaving(true);
+      setIsProcessing(true);
       
       const response = await fetch(`/api/review/${batch_id}`, {
         method: 'POST',
@@ -293,17 +342,20 @@ export default function ReviewDetailPage() {
       });
 
       if (!response.ok) {
+        setIsProcessing(false);
         throw new Error('Failed to save data');
       }
 
       const result = await response.json();
+      setIsSaving(false);
       
-      alert('Perubahan disimpan! Memulai AI Workflow #2...');
-      router.push('/dashboard/goals');
+      alert('Perubahan disimpan! Sedang membuat rincian KPI...');
+      // Start polling for status
+      startPolling(batch_id);
     } catch (error) {
       console.error('Error saving data:', error);
       alert('Gagal menyimpan perubahan. Silakan coba lagi.');
-    } finally {
+      setIsProcessing(false);
       setIsSaving(false);
     }
   };
@@ -419,8 +471,7 @@ export default function ReviewDetailPage() {
                         Generating AI...
                       </>
                     ) : (
-                      <>🤖 Rekomendasi AI</>
-                    )}
+                      <>🤖 Rekomendasi AI</>                  )}
                   </button>
                 </div>
 
@@ -429,24 +480,33 @@ export default function ReviewDetailPage() {
                     type="button"
                     onClick={() => router.push('/dashboard/review')}
                     className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                    disabled={isProcessing}
                   >
                     Batal
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSaving || teamRoles.length === 0 || breakdowns.length === 0}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isSaving ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Menyimpan...
-                      </>
-                    ) : (
-                      <>💾 Simpan Semua</>
-                    )}
-                  </button>
+                  
+                  {!isProcessing ? (
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={isSaving || teamRoles.length === 0 || breakdowns.length === 0}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isSaving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Menyimpan...
+                        </>
+                      ) : (
+                        <>💾 Simpan & Setujui</>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="px-6 py-2 bg-yellow-100 text-yellow-800 rounded-lg flex items-center gap-2 border border-yellow-300">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-800"></div>
+                      <span>Sedang membuat rincian KPI, mohon tunggu...</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -541,31 +601,38 @@ export default function ReviewDetailPage() {
                       <>🤖 Rekomendasi AI</>
                     )}
                   </button>
-                </div>
-
-                <div className="flex gap-3">
+                </div>                <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => router.push('/dashboard/review')}
                     className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                    disabled={isProcessing}
                   >
                     Batal
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSaving || teamRoles.length === 0 || breakdowns.length === 0}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isSaving ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Menyimpan...
-                      </>
-                    ) : (
-                      <>💾 Simpan Semua</>
-                    )}
-                  </button>
+                  
+                  {!isProcessing ? (
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={isSaving || teamRoles.length === 0 || breakdowns.length === 0}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isSaving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Menyimpan...
+                        </>
+                      ) : (
+                        <>💾 Simpan & Setujui</>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="px-6 py-2 bg-yellow-100 text-yellow-800 rounded-lg flex items-center gap-2 border border-yellow-300">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-800"></div>
+                      <span>Sedang membuat rincian KPI, mohon tunggu...</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -716,8 +783,7 @@ export default function ReviewDetailPage() {
                         Generating AI...
                       </>
                     ) : (
-                      <>🤖 Rekomendasi AI</>
-                    )}
+                      <>🤖 Rekomendasi AI</>                  )}
                   </button>
                 </div>
 
@@ -726,24 +792,33 @@ export default function ReviewDetailPage() {
                     type="button"
                     onClick={() => router.push('/dashboard/review')}
                     className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                    disabled={isProcessing}
                   >
                     Batal
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSaving || teamRoles.length === 0 || breakdowns.length === 0}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isSaving ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Menyimpan...
-                      </>
-                    ) : (
-                      <>💾 Simpan Semua</>
-                    )}
-                  </button>
+                  
+                  {!isProcessing ? (
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={isSaving || teamRoles.length === 0 || breakdowns.length === 0}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isSaving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Menyimpan...
+                        </>
+                      ) : (
+                        <>💾 Simpan & Setujui</>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="px-6 py-2 bg-yellow-100 text-yellow-800 rounded-lg flex items-center gap-2 border border-yellow-300">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-800"></div>
+                      <span>Sedang membuat rincian KPI, mohon tunggu...</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -800,9 +875,7 @@ export default function ReviewDetailPage() {
                           placeholder="@username, URL"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                         />
-                      </div>
-
-                      {/* Delete Button */}
+                      </div>                      {/* Delete Button */}
                       <div className="col-span-12 sm:col-span-1 flex items-end sm:order-last">
                         <button
                           type="button"
