@@ -40,10 +40,10 @@ export default function ReviewDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [activeTab, setActiveTab] = useState<'tim' | 'breakdown' | 'aset'>('tim');
-  
-  // New state for polling after submit
+    // New state for polling after submit
   const [isProcessing, setIsProcessing] = useState(false);
   const [pollingIntervalId, setPollingIntervalId] = useState<number | null>(null);
+  const [savingStep, setSavingStep] = useState<string>(''); // Track which step is being saved
   useEffect(() => {
     if (!batch_id) return;
 
@@ -328,6 +328,7 @@ export default function ReviewDetailPage() {
     }    try {
       setIsSaving(true);
       setIsProcessing(true);
+      setSavingStep('Menyimpan perubahan ke database...');
       
       const response = await fetch(`/api/review/${batch_id}`, {
         method: 'POST',
@@ -343,11 +344,13 @@ export default function ReviewDetailPage() {
 
       if (!response.ok) {
         setIsProcessing(false);
+        setSavingStep('');
         throw new Error('Failed to save data');
       }
 
       const result = await response.json();
       setIsSaving(false);
+      setSavingStep('Menunggu AI membuat rincian KPI...');
       
       alert('Perubahan disimpan! Sedang membuat rincian KPI...');
       // Start polling for status
@@ -357,6 +360,7 @@ export default function ReviewDetailPage() {
       alert('Gagal menyimpan perubahan. Silakan coba lagi.');
       setIsProcessing(false);
       setIsSaving(false);
+      setSavingStep('');
     }
   };
 
@@ -447,9 +451,7 @@ export default function ReviewDetailPage() {
             <div>
               <p className="text-sm text-gray-600 mb-4">
                 Edit rekomendasi role dari AI. Anda bisa menambah, mengedit, atau menghapus role.
-              </p>
-
-              {/* Action Buttons - Moved to Top */}
+              </p>              {/* Action Buttons - Moved to Top */}
               <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex gap-3">
                   <button
@@ -462,8 +464,9 @@ export default function ReviewDetailPage() {
                   <button
                     type="button"
                     onClick={handleAIRecommendation}
-                    disabled={isGeneratingAI}
+                    disabled={isGeneratingAI || isProcessing}
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={isProcessing ? "Tombol ini akan aktif setelah proses KPI selesai" : "Generate ulang rekomendasi AI"}
                   >
                     {isGeneratingAI ? (
                       <>
@@ -574,9 +577,7 @@ export default function ReviewDetailPage() {
             <div>
               <p className="text-sm text-gray-600 mb-4">
                 Edit target breakdown di bawah ini sesuai kebutuhan. Anda bisa menambah, mengedit, atau menghapus baris.
-              </p>
-
-              {/* Action Buttons - Moved to Top */}
+              </p>              {/* Action Buttons - Moved to Top */}
               <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex gap-3">
                   <button
@@ -589,8 +590,9 @@ export default function ReviewDetailPage() {
                   <button
                     type="button"
                     onClick={handleAIRecommendation}
-                    disabled={isGeneratingAI}
+                    disabled={isGeneratingAI || isProcessing}
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={isProcessing ? "Tombol ini akan aktif setelah proses KPI selesai" : "Generate ulang rekomendasi AI"}
                   >
                     {isGeneratingAI ? (
                       <>
@@ -601,7 +603,7 @@ export default function ReviewDetailPage() {
                       <>🤖 Rekomendasi AI</>
                     )}
                   </button>
-                </div>                <div className="flex gap-3">
+                </div><div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => router.push('/dashboard/review')}
@@ -759,9 +761,7 @@ export default function ReviewDetailPage() {
             <div>
               <p className="text-sm text-gray-600 mb-4">
                 Edit managed assets yang terkait dengan strategi ini. Tambah, edit, atau hapus aset.
-              </p>
-
-              {/* Action Buttons - Moved to Top */}
+              </p>              {/* Action Buttons - Moved to Top */}
               <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex gap-3">
                   <button
@@ -774,8 +774,9 @@ export default function ReviewDetailPage() {
                   <button
                     type="button"
                     onClick={handleAIRecommendation}
-                    disabled={isGeneratingAI}
+                    disabled={isGeneratingAI || isProcessing}
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={isProcessing ? "Tombol ini akan aktif setelah proses KPI selesai" : "Generate ulang rekomendasi AI"}
                   >
                     {isGeneratingAI ? (
                       <>

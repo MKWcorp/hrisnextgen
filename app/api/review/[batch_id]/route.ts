@@ -123,69 +123,132 @@ export async function POST(
         { error: 'Invalid data', message: 'Assets array is required' },
         { status: 400 }
       );
-    }    // Use transaction for safe operations
+    }    // Use transaction for safe operations - OPTIMIZED with upsert instead of delete+create
     await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => {
-      // Step 1: Delete all old team roles for this batch
-      await tx.ai_recommended_roles.deleteMany({
-        where: {
-          batch_id: batch_id,
-        },
+      // Get existing IDs to determine what to update vs create
+      const existingRoles = await tx.ai_recommended_roles.findMany({
+        where: { batch_id: batch_id },
+        select: { role_recommendation_id: true },
+      });
+      const existingBreakdowns = await tx.proposed_breakdowns.findMany({
+        where: { batch_id: batch_id },
+        select: { breakdown_id: true },
+      });
+      const existingAssets = await tx.batch_managed_assets.findMany({
+        where: { batch_id: batch_id },
+        select: { asset_id: true },
       });
 
-      // Step 2: Create new team roles
-      await tx.ai_recommended_roles.createMany({
-        data: teamRoles.map((role: any) => ({
-          role_name: role.role_name,
-          responsibilities: role.responsibilities,
-          batch_id: batch_id,
-        })),
-      });
+      // TEAM ROLES: Update existing, create new, delete removed
+      const roleIdsFromFrontend = teamRoles.filter((r: any) => r.role_recommendation_id).map((r: any) => r.role_recommendation_id);
+      const rolesToDelete = existingRoles.filter(r => !roleIdsFromFrontend.includes(r.role_recommendation_id));
+      
+      if (rolesToDelete.length > 0) {
+        await tx.ai_recommended_roles.deleteMany({
+          where: { role_recommendation_id: { in: rolesToDelete.map(r => r.role_recommendation_id) } },
+        });
+      }
 
-      // Step 3: Delete all old proposed_breakdowns for this batch
-      await tx.proposed_breakdowns.deleteMany({
-        where: {
-          batch_id: batch_id,
-        },
-      });
+      for (const role of teamRoles) {
+        if (role.role_recommendation_id) {
+          // Update existing
+          await tx.ai_recommended_roles.update({
+            where: { role_recommendation_id: role.role_recommendation_id },
+            data: {
+              role_name: role.role_name,
+              responsibilities: role.responsibilities,
+            },
+          });
+        } else {
+          // Create new
+          await tx.ai_recommended_roles.create({
+            data: {
+              role_name: role.role_name,
+              responsibilities: role.responsibilities,
+              batch_id: batch_id,
+            },
+          });
+        }
+      }
 
-      // Step 4: Create new breakdowns
-      await tx.proposed_breakdowns.createMany({
-        data: breakdowns.map((b: any) => ({
-          name: b.name,
-          value: BigInt(b.value), // Convert to BigInt for database
-          unit: b.unit,
-          description: b.description || null, // Include description from frontend
-          batch_id: batch_id,
-        })),
-      });
+      // BREAKDOWNS: Update existing, create new, delete removed
+      const breakdownIdsFromFrontend = breakdowns.filter((b: any) => b.breakdown_id).map((b: any) => b.breakdown_id);
+      const breakdownsToDelete = existingBreakdowns.filter(b => !breakdownIdsFromFrontend.includes(b.breakdown_id));
+      
+      if (breakdownsToDelete.length > 0) {
+        await tx.proposed_breakdowns.deleteMany({
+          where: { breakdown_id: { in: breakdownsToDelete.map(b => b.breakdown_id) } },
+        });
+      }
 
-      // Step 5: Delete all old assets for this batch
-      await tx.batch_managed_assets.deleteMany({
-        where: {
-          batch_id: batch_id,
-        },
-      });
+      for (const breakdown of breakdowns) {
+        if (breakdown.breakdown_id) {
+          // Update existing
+          await tx.proposed_breakdowns.update({
+            where: { breakdown_id: breakdown.breakdown_id },
+            data: {
+              name: breakdown.name,
+              value: BigInt(breakdown.value),
+              unit: breakdown.unit,
+              description: breakdown.description || null,
+            },
+          });
+        } else {
+          // Create new
+          await tx.proposed_breakdowns.create({
+            data: {
+              name: breakdown.name,
+              value: BigInt(breakdown.value),
+              unit: breakdown.unit,
+              description: breakdown.description || null,
+              batch_id: batch_id,
+            },
+          });
+        }
+      }
 
-      // Step 6: Create new assets
-      await tx.batch_managed_assets.createMany({
-        data: assets.map((asset: any) => ({
-          asset_category: asset.asset_category,
-          asset_name: asset.asset_name,
-          asset_identifier: asset.asset_identifier || null,
-          metric_name: asset.metric_name || null,
-          metric_value: asset.metric_value ? BigInt(asset.metric_value) : null,
-          batch_id: batch_id,
-        })),
-      });
+      // ASSETS: Update existing, create new, delete removed
+      const assetIdsFromFrontend = assets.filter((a: any) => a.asset_id).map((a: any) => a.asset_id);
+      const assetsToDelete = existingAssets.filter(a => !assetIdsFromFrontend.includes(a.asset_id));
+      
+      if (assetsToDelete.length > 0) {
+        await tx.batch_managed_assets.deleteMany({
+          where: { asset_id: { in: assetsToDelete.map(a => a.asset_id) } },
+        });
+      }
 
-      // Step 7: Update analysis_batches status to trigger n8n Workflow #2
+      for (const asset of assets) {
+        if (asset.asset_id) {
+          // Update existing
+          await tx.batch_managed_assets.update({
+            where: { asset_id: asset.asset_id },
+            data: {
+              asset_category: asset.asset_category,
+              asset_name: asset.asset_name,
+              asset_identifier: asset.asset_identifier || null,
+              metric_name: asset.metric_name || null,
+              metric_value: asset.metric_value ? BigInt(asset.metric_value) : null,
+            },
+          });
+        } else {
+          // Create new
+          await tx.batch_managed_assets.create({
+            data: {
+              asset_category: asset.asset_category,
+              asset_name: asset.asset_name,
+              asset_identifier: asset.asset_identifier || null,
+              metric_name: asset.metric_name || null,
+              metric_value: asset.metric_value ? BigInt(asset.metric_value) : null,
+              batch_id: batch_id,
+            },
+          });
+        }
+      }
+
+      // Update batch status
       await tx.analysis_batches.update({
-        where: {
-          batch_id: batch_id,
-        },
-        data: {
-          status: 'kpi_breakdown_pending',
-        },
+        where: { batch_id: batch_id },
+        data: { status: 'kpi_breakdown_pending' },
       });
     });
 
