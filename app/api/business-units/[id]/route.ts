@@ -58,3 +58,70 @@ export async function GET(
     );
   }
 }
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { name, description } = body;
+
+    if (!name) {
+      return NextResponse.json(
+        { error: 'Business unit name is required' },
+        { status: 400 }
+      );
+    }
+
+    const businessUnit = await prisma.business_units.update({
+      where: { bu_id: id },
+      data: {
+        name,
+        description: description || null,
+      },
+    });
+
+    return NextResponse.json(businessUnit);
+  } catch (error) {
+    console.error('Error updating business unit:', error);
+    return NextResponse.json(
+      { error: 'Failed to update business unit' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    // Check if business unit is being used by any users
+    const usersCount = await prisma.users.count({
+      where: { business_unit_id: id },
+    });
+
+    if (usersCount > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete business unit. It is being used by ${usersCount} user(s). Please reassign or delete those users first.` },
+        { status: 400 }
+      );
+    }
+
+    await prisma.business_units.delete({
+      where: { bu_id: id },
+    });
+
+    return NextResponse.json({ message: 'Business unit deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting business unit:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete business unit' },
+      { status: 500 }
+    );
+  }
+}

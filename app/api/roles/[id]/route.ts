@@ -58,6 +58,18 @@ export async function DELETE(
       );
     }
 
+    // Check if role is being used by any users
+    const usersCount = await prisma.users.count({
+      where: { role_id: roleId },
+    });
+
+    if (usersCount > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete role. It is being used by ${usersCount} user(s). Please reassign or delete those users first.` },
+        { status: 400 }
+      );
+    }
+
     await prisma.roles.delete({
       where: { role_id: roleId },
     });

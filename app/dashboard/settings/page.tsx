@@ -296,13 +296,37 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
+      <div className="max-w-7xl mx-auto">        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">⚙️ Settings</h1>
           <p className="text-gray-600 mt-2">
             Kelola Business Units, Roles, dan Users
           </p>
+          
+          {/* Requirement Info */}
+          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="font-semibold text-blue-900 mb-2">📋 Requirement Setup</h3>
+            <div className="text-sm text-blue-800 space-y-1">
+              <p className="flex items-center gap-2">
+                {businessUnits.length > 0 ? '✅' : '❌'} 
+                <strong>Business Units:</strong> {businessUnits.length > 0 ? `${businessUnits.length} unit (sudah lengkap)` : 'Minimal 1 unit diperlukan'}
+              </p>
+              <p className="flex items-center gap-2">
+                {users.length > 0 ? '✅' : '❌'} 
+                <strong>Users:</strong> {users.length > 0 ? `${users.length} user (sudah lengkap)` : 'Minimal 1 user diperlukan'}
+              </p>
+              <p className="flex items-center gap-2">
+                ℹ️ <strong>Roles:</strong> {roles.length > 0 ? `${roles.length} role` : 'Opsional'} (bisa diisi atau kosong, nanti akan diisi AI)
+              </p>
+            </div>
+            {businessUnits.length > 0 && users.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-blue-200">
+                <p className="text-sm text-blue-900 font-medium">
+                  🎉 Setup lengkap! Anda siap membuat Goal pertama.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}

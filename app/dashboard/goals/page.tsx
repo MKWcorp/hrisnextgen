@@ -297,25 +297,9 @@ export default function GoalsPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Goal Management</h1>
               <p className="text-gray-600 mt-2">Review and manage strategic goals and AI-generated breakdowns</p>
-            </div>
-            {!selectedGoalId && (
+            </div>            {!selectedGoalId && (
               <div className="flex items-center gap-3">
-                <button
-                  onClick={handleAnalyzeGoals}
-                  disabled={analyzingGoals || goals.length === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {analyzingGoals ? (
-                    <>
-                      <FontAwesomeIcon icon={faSpinner} className="w-4 h-4 animate-spin" />
-                      {pollingActive ? `Polling... (${pollingAttempts})` : 'Menganalisa...'}
-                    </>
-                  ) : (
-                    <>
-                      🤖 Rekomendasi AI
-                    </>
-                  )}
-                </button>
+                {/* Tombol Create Goal Baru */}
                 <button
                   onClick={() => router.push('/dashboard/goals/create')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -323,6 +307,26 @@ export default function GoalsPage() {
                   <FontAwesomeIcon icon={faPlus} className="w-4 h-4" />
                   Buat Goal Baru
                 </button>
+                
+                {/* Tombol AI hanya muncul jika ada minimal 1 goal */}
+                {goals.length > 0 && (
+                  <button
+                    onClick={handleAnalyzeGoals}
+                    disabled={analyzingGoals}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {analyzingGoals ? (
+                      <>
+                        <FontAwesomeIcon icon={faSpinner} className="w-4 h-4 animate-spin" />
+                        {pollingActive ? `Polling... (${pollingAttempts})` : 'Menganalisa...'}
+                      </>
+                    ) : (
+                      <>
+                        🤖 Rekomendasi AI
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             )}
           </div>
